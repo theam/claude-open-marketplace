@@ -1,17 +1,15 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "monkey-tools",
+  "description": "AI-powered tools for Claude by The Agile Monkeys",
   "owner": {
     "name": "The Agile Monkeys",
     "email": "labs@theagilemonkeys.com"
   },
-  "metadata": {
-    "description": "AI-powered tools for Claude by The Agile Monkeys",
-    "pluginRoot": "./plugins"
-  },
   "plugins": [
     {
       "name": "transcription",
-      "source": "transcription",
+      "source": "./plugins/transcription",
       "description": "Local-first audio transcription with speaker diarization. Uses Apple Silicon GPU (MLX) for ~5x real-time speed. No API keys, no cloud — everything runs on your machine.",
       "version": "0.1.0",
       "author": {
