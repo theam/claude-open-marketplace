@@ -2,7 +2,7 @@
   "mcpServers": {
     "transcription": {
       "command": "bash",
-      "args": ["-lc", "uv run --directory '${CLAUDE_PLUGIN_ROOT}' python server.py"]
+      "args": ["-lc", "UV_PROJECT_ENVIRONMENT=\"$HOME/.local/share/transcription-mcp/.venv\" uv run --directory '${CLAUDE_PLUGIN_ROOT}' python server.py"]
     }
   }
 }

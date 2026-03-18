@@ -1,46 +1,40 @@
-"""Transcription MCP Server — Local-first using WhisperX + pyannote."""
+"""Transcription MCP Server — Local-first using WhisperX + pyannote.
+
+Starts instantly with only the MCP framework loaded.
+Heavy ML dependencies (torch, whisperx, mlx-whisper) are installed
+on first transcription and cached for subsequent uses.
+"""
 
 import json
 import os
+import subprocess
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import torch
-import whisperx
-from whisperx.diarize import DiarizationPipeline
 from mcp.server.fastmcp import FastMCP
 
-# Bundled pyannote models — no HuggingFace token needed
+# Plugin directory and bundled models
 _PLUGIN_DIR = Path(__file__).parent
 _MODELS_DIR = _PLUGIN_DIR / "models"
 
-DEVICE = "cpu"
-COMPUTE_TYPE = "int8"
+# Stable venv location for ML dependencies (survives plugin cache changes)
+_ML_VENV = Path.home() / ".local" / "share" / "transcription-mcp" / ".venv"
 
-# Use MPS (Apple Silicon GPU) if available
-if torch.backends.mps.is_available():
-    DEVICE = "mps"
-    COMPUTE_TYPE = "float16"
+# Lazy-loaded modules
+_torch = None
+_whisperx = None
+_mlx_whisper = None
+_DiarizationPipeline = None
 
-# Detect MLX availability (Apple Silicon GPU acceleration)
-USE_MLX = False
-try:
-    import mlx_whisper
-    USE_MLX = True
-    print("MLX backend available — using Apple Silicon GPU for ASR")
-except ImportError:
-    print("MLX not available — using faster-whisper/CPU backend")
-
-# MLX model defaults
-MLX_MODEL = os.environ.get(
-    "MLX_MODEL", "mlx-community/whisper-large-v3-mlx"
-)
-
-# State
+# Runtime state
+_ml_deps_ready = False
+_use_mlx = False
+_device = "cpu"
+_compute_type = "int8"
+_mlx_model = os.environ.get("MLX_MODEL", "mlx-community/whisper-large-v3-mlx")
 _model = None
-_align_model = None
-_align_metadata = None
 _diarize_pipeline = None
 _transcriptions: dict[str, dict] = {}
 
@@ -57,15 +51,69 @@ mcp = FastMCP(
 )
 
 
+def _ensure_ml_deps():
+    """Install and import ML dependencies on first use."""
+    global _ml_deps_ready, _torch, _whisperx, _mlx_whisper, _DiarizationPipeline
+    global _use_mlx, _device, _compute_type
+
+    if _ml_deps_ready:
+        return
+
+    # Check if deps are already importable
+    try:
+        import torch
+        import whisperx
+        _torch = torch
+        _whisperx = whisperx
+    except ImportError:
+        # Install ML deps into the stable venv
+        print("Installing ML dependencies (first run only, ~2GB download)...")
+        _ML_VENV.parent.mkdir(parents=True, exist_ok=True)
+        ml_deps = [
+            "torch>=2.8.0",
+            "torchaudio>=2.8.0",
+            "whisperx>=3.8.2",
+            "mlx-whisper>=0.4.0",
+        ]
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--quiet"] + ml_deps,
+        )
+        print("ML dependencies installed.")
+        import torch
+        import whisperx
+        _torch = torch
+        _whisperx = whisperx
+
+    # Detect device
+    if _torch.backends.mps.is_available():
+        _device = "mps"
+        _compute_type = "float16"
+
+    # Try MLX
+    try:
+        import mlx_whisper
+        _mlx_whisper = mlx_whisper
+        _use_mlx = True
+        print("MLX backend available — using Apple Silicon GPU for ASR")
+    except ImportError:
+        print("MLX not available — using faster-whisper/CPU backend")
+
+    # Import diarization pipeline
+    from whisperx.diarize import DiarizationPipeline
+    _DiarizationPipeline = DiarizationPipeline
+
+    _ml_deps_ready = True
+
+
 def _get_model():
     """Lazy-load the Whisper model (faster-whisper/CPU path only)."""
     global _model
     if _model is None:
         print("Loading Whisper large-v3-turbo model (CPU)...")
-        _model = whisperx.load_model(
+        _model = _whisperx.load_model(
             "large-v3-turbo",
-            device=DEVICE if DEVICE != "mps" else "cpu",
-            compute_type=COMPUTE_TYPE if DEVICE != "mps" else "int8",
+            device=_device if _device != "mps" else "cpu",
+            compute_type=_compute_type if _device != "mps" else "int8",
             language=None,
         )
         print("Model loaded.")
@@ -76,15 +124,14 @@ def _transcribe_mlx(
     audio_path: str, language: str | None = None, model_repo: str | None = None,
 ) -> dict:
     """Transcribe using MLX backend (Apple Silicon GPU)."""
-    repo = model_repo or MLX_MODEL
+    repo = model_repo or _mlx_model
     print(f"Transcribing with MLX ({repo})...")
-    result = mlx_whisper.transcribe(
+    result = _mlx_whisper.transcribe(
         audio_path,
         path_or_hf_repo=repo,
         language=language,
         word_timestamps=True,
     )
-    # Convert mlx-whisper output to WhisperX-compatible format
     segments = []
     for seg in result.get("segments", []):
         segments.append({
@@ -103,20 +150,17 @@ def _get_diarize_pipeline():
     global _diarize_pipeline
     if _diarize_pipeline is None:
         print("Loading pyannote diarization pipeline...")
-        # Temporarily set offline mode + cache dir for pyannote only
-        # (avoids blocking Whisper MLX model downloads)
         old_cache = os.environ.get("HF_HUB_CACHE")
         old_offline = os.environ.get("HF_HUB_OFFLINE")
         try:
             if _MODELS_DIR.is_dir():
                 os.environ["HF_HUB_CACHE"] = str(_MODELS_DIR)
                 os.environ["HF_HUB_OFFLINE"] = "1"
-            _diarize_pipeline = DiarizationPipeline(
+            _diarize_pipeline = _DiarizationPipeline(
                 model_name="pyannote/speaker-diarization-3.1",
                 device="cpu",
             )
         finally:
-            # Restore original env
             if old_cache is None:
                 os.environ.pop("HF_HUB_CACHE", None)
             else:
@@ -148,7 +192,6 @@ def _format_transcript(result: dict, include_timestamps: bool = True) -> str:
 
 
 def _fmt_time(seconds: float) -> str:
-    """Format seconds as HH:MM:SS."""
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
     s = int(seconds % 60)
@@ -156,16 +199,11 @@ def _fmt_time(seconds: float) -> str:
 
 
 def _find_audio_files(directory: str) -> list[Path]:
-    """Find audio files in a directory."""
     audio_extensions = {".m4a", ".mp3", ".wav", ".flac", ".ogg", ".wma", ".aac", ".mp4"}
     path = Path(directory)
     if not path.is_dir():
         return []
-    files = []
-    for f in sorted(path.iterdir()):
-        if f.suffix.lower() in audio_extensions and f.is_file():
-            files.append(f)
-    return files
+    return [f for f in sorted(path.iterdir()) if f.suffix.lower() in audio_extensions and f.is_file()]
 
 
 @mcp.tool()
@@ -202,6 +240,7 @@ def transcribe_audio(
 
     All processing happens locally on your machine. No data is sent to any cloud service.
     Uses MLX (Apple Silicon GPU) when available for ~5-10x speedup over CPU.
+    First run installs ML dependencies (~2GB, cached for future use).
 
     Args:
         file_path: Path to the audio file to transcribe.
@@ -216,20 +255,21 @@ def transcribe_audio(
     if not path.exists():
         return f"File not found: {file_path}"
 
+    # Ensure ML dependencies are installed (instant after first run)
+    _ensure_ml_deps()
+
     file_key = str(path.resolve())
     start_time = time.time()
-
-    # Override MLX model if requested
-    mlx_model = model or MLX_MODEL
+    mlx_model = model or _mlx_model
 
     # Step 1: Load audio
     print(f"Loading audio: {path.name}")
-    audio = whisperx.load_audio(str(path))
+    audio = _whisperx.load_audio(str(path))
     duration_s = len(audio) / 16000
     print(f"Audio loaded: {duration_s:.0f}s ({duration_s/60:.1f} min)")
 
     # Step 2: Transcribe (MLX GPU or faster-whisper CPU)
-    if USE_MLX:
+    if _use_mlx:
         result = _transcribe_mlx(str(path), language=language, model_repo=mlx_model)
         detected_lang = result["language"]
     else:
@@ -237,22 +277,21 @@ def transcribe_audio(
         whisper_model = _get_model()
         result = whisper_model.transcribe(
             audio,
-            batch_size=16 if DEVICE != "mps" else 4,
+            batch_size=16 if _device != "mps" else 4,
             language=language,
         )
         detected_lang = result.get("language", language or "unknown")
         print(f"Transcription complete. Language: {detected_lang}")
 
-    # Step 3: Align (word-level timestamps) — needed for diarization merge
+    # Step 3: Diarization (optional, parallel with alignment)
     if not skip_diarization:
-        # When diarizing, run alignment and diarization in parallel
         def _align():
             print("Aligning timestamps...")
-            align_model, align_metadata = whisperx.load_align_model(
+            align_model, align_metadata = _whisperx.load_align_model(
                 language_code=detected_lang,
                 device="cpu",
             )
-            aligned = whisperx.align(
+            aligned = _whisperx.align(
                 result["segments"],
                 align_model,
                 align_metadata,
@@ -277,18 +316,16 @@ def transcribe_audio(
             print("Diarization complete.")
             return diarize_result
 
-        # Run alignment and diarization concurrently — both release the GIL
         with ThreadPoolExecutor(max_workers=2) as executor:
             align_future = executor.submit(_align)
             diarize_future = executor.submit(_diarize)
             aligned_result = align_future.result()
             diarize_segments = diarize_future.result()
 
-        result = whisperx.assign_word_speakers(diarize_segments, aligned_result)
+        result = _whisperx.assign_word_speakers(diarize_segments, aligned_result)
 
     elapsed = time.time() - start_time
 
-    # Store result
     _transcriptions[file_key] = {
         "file": path.name,
         "path": file_key,
@@ -299,15 +336,13 @@ def transcribe_audio(
         "speaker_names": {},
     }
 
-    # Build summary
     speakers = set()
     for seg in result["segments"]:
         if "speaker" in seg:
             speakers.add(seg["speaker"])
 
     transcript_text = _format_transcript(result)
-
-    backend = f"MLX ({mlx_model.split('/')[-1]})" if USE_MLX else "CPU"
+    backend = f"MLX ({mlx_model.split('/')[-1]})" if _use_mlx else "CPU"
     diarization_status = "skipped" if skip_diarization else f"{len(speakers)} speakers"
 
     summary = (
@@ -376,13 +411,11 @@ def get_transcription(
     result = {"segments": t["segments"]}
     names = t.get("speaker_names", {})
 
-    # Apply speaker name substitutions
     for seg in result["segments"]:
         speaker_id = seg.get("speaker", "Unknown")
         if speaker_id in names:
             seg["speaker"] = names[speaker_id]
 
-    # Filter by speaker if requested
     if speaker_filter:
         result["segments"] = [
             s for s in result["segments"]
@@ -474,7 +507,6 @@ def export_transcription(
 
 
 def _srt_time(seconds: float) -> str:
-    """Format seconds as SRT timestamp (HH:MM:SS,mmm)."""
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
     s = int(seconds % 60)
