@@ -6,6 +6,8 @@ diarization, formatting. No MCP or CLI-specific code here.
 
 import json
 import os
+import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -32,6 +34,67 @@ _model = None
 _diarize_pipeline = None
 
 
+def _find_uv() -> str | None:
+    """Find the uv binary, checking PATH and common install locations."""
+    found = shutil.which("uv")
+    if found:
+        return found
+    for candidate in [
+        Path.home() / ".local" / "bin" / "uv",
+        Path.home() / ".cargo" / "bin" / "uv",
+        Path("/usr/local/bin/uv"),
+    ]:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def _install_ml_deps():
+    """Install ML deps using uv (preferred) or pip (fallback).
+
+    Raises RuntimeError with actionable instructions on failure.
+    """
+    deps = ["torch>=2.8.0", "torchaudio>=2.8.0", "whisperx>=3.8.2"]
+    if platform.system() == "Darwin" and platform.machine() == "arm64":
+        deps.append("mlx-whisper>=0.4.0")
+
+    # Strategy 1: uv pip install (works in uv-managed venvs)
+    uv = _find_uv()
+    if uv:
+        try:
+            print("Installing ML dependencies via uv (first run only, ~2GB download)...")
+            subprocess.check_call(
+                [uv, "pip", "install", "--quiet"] + deps, timeout=600,
+            )
+            print("ML dependencies installed.")
+            return
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            print(f"uv install failed ({exc}), trying pip fallback...")
+
+    # Strategy 2: pip module (traditional venvs)
+    try:
+        print("Installing ML dependencies via pip (first run only, ~2GB download)...")
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--quiet"] + deps, timeout=600,
+        )
+        print("ML dependencies installed.")
+        return
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    # Both strategies failed — give actionable error
+    venv = os.environ.get("VIRTUAL_ENV", "unknown")
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    deps_str = " ".join(f'"{d}"' for d in deps)
+    raise RuntimeError(
+        f"Failed to install ML dependencies automatically.\n\n"
+        f"Environment: Python {py_ver}, venv={venv}\n\n"
+        f"Manual fix — run one of:\n"
+        f"  uv pip install {deps_str}\n"
+        f"  pip install {deps_str}\n"
+    )
+
+
 def ensure_ml_deps():
     """Install and import ML dependencies on first use."""
     global _ml_deps_ready, _torch, _whisperx, _mlx_whisper, _DiarizationPipeline
@@ -47,18 +110,7 @@ def ensure_ml_deps():
         _torch = torch
         _whisperx = whisperx
     except ImportError:
-        # Install ML deps
-        print("Installing ML dependencies (first run only, ~2GB download)...")
-        ml_deps = [
-            "torch>=2.8.0",
-            "torchaudio>=2.8.0",
-            "whisperx>=3.8.2",
-            "mlx-whisper>=0.4.0",
-        ]
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--quiet"] + ml_deps,
-        )
-        print("ML dependencies installed.")
+        _install_ml_deps()
         import torch
         import whisperx
         _torch = torch

@@ -1,10 +1,23 @@
 [project]
 name = "transcription-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local-first audio transcription MCP server with speaker diarization"
 readme = "README.md"
 requires-python = ">=3.11"
 # Only MCP framework for instant startup. Heavy ML deps installed on first transcription.
 dependencies = [
     "mcp>=1.26.0",
+]
+
+[project.optional-dependencies]
+ml = [
+    "torch>=2.8.0",
+    "torchaudio>=2.8.0",
+    "whisperx>=3.8.2",
+]
+ml-apple = [
+    "torch>=2.8.0",
+    "torchaudio>=2.8.0",
+    "whisperx>=3.8.2",
+    "mlx-whisper>=0.4.0",
 ]

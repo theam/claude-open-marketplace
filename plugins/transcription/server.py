@@ -95,6 +95,8 @@ def transcribe_audio(
         )
     except FileNotFoundError as e:
         return str(e)
+    except RuntimeError as e:
+        return str(e)
 
     file_key = result["path"]
     _transcriptions[file_key] = {

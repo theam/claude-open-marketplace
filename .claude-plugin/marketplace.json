@@ -11,7 +11,7 @@
       "name": "transcription",
       "source": "./plugins/transcription",
       "description": "Local-first audio transcription with speaker diarization. Uses Apple Silicon GPU (MLX) for ~5x real-time speed. No API keys, no cloud — everything runs on your machine.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": {
         "name": "The Agile Monkeys"
       },

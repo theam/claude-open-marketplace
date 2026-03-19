@@ -60,3 +60,10 @@ uv run --directory /path/to/plugins/transcription python transcribe_cli.py "/pat
 - **Apple Silicon**: Automatically uses MLX for ~5x real-time transcription speed.
 - **Output**: Summary stats go to stderr. Clean transcript goes to stdout.
 - The transcript text is printed to stdout — capture it or read it directly from the Bash output.
+
+## Platform Notes
+
+- **Claude Code (macOS/Apple Silicon)**: Full support. Uses MLX GPU acceleration. Deps auto-install via `uv` or `pip`.
+- **Claude Code (Linux/Intel Mac)**: CPU-only mode (no MLX). Slower but functional.
+- **Cowork**: CPU-only. Requires Python 3.11+ in the VM. Network restrictions may prevent auto-install of ML deps — pre-install with `uv pip install -e ".[ml]"` if needed.
+- **Pre-install deps** to avoid first-run delay: `uv pip install -e ".[ml-apple]"` (Apple Silicon) or `uv pip install -e ".[ml]"` (other platforms).
