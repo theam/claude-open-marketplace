@@ -22,7 +22,17 @@ A plugin marketplace for Claude Code and Claude Desktop. Install once, use every
 6. Enter `theam/monkey-tools` and click **Sync**
 7. Install the plugins you want from the list
 
-### Claude Code
+### Claude App — Code Tab
+
+The Code tab in the Claude app uses a separate plugin configuration from the chat interface. To install:
+
+1. Open the **Code** tab
+2. Click **Customize** (bottom-left)
+3. Follow the same marketplace steps as above (Personal Plugins → Browse → Add marketplace → `theam/monkey-tools`)
+
+> **Note**: Plugins installed in the chat interface are not shared with the Code tab — you need to install them separately.
+
+### Claude Code (CLI)
 
 ```bash
 claude plugin marketplace add theam/monkey-tools
