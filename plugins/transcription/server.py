@@ -1,8 +1,7 @@
-"""Transcription MCP Server — Local-first using WhisperX + pyannote.
+"""Transcription MCP Server — Local-first using scribe CLI.
 
-Starts instantly with only the MCP framework loaded.
-Heavy ML dependencies (torch, whisperx, mlx-whisper) are installed
-on first transcription and cached for subsequent uses.
+Thin MCP wrapper around the scribe CLI (https://github.com/theam/scribe).
+Requires scribe to be installed: brew install theam/tap/scribe
 """
 
 import json
@@ -66,18 +65,17 @@ def transcribe_audio(
 ) -> str:
     """Transcribe an audio file with optional speaker diarization.
 
-    All processing happens locally on your machine. No data is sent to any cloud service.
-    Uses MLX (Apple Silicon GPU) when available for ~5-10x speedup over CPU.
-    First run installs ML dependencies (~2GB, cached for future use).
+    All processing happens locally via the scribe CLI. No data leaves your machine.
+    Requires scribe: brew install theam/tap/scribe
 
     Args:
         file_path: Path to the audio file to transcribe.
         language: Language code (e.g., 'en', 'es'). Auto-detected if not specified.
         num_speakers: Exact number of speakers if known.
-        min_speakers: Minimum expected number of speakers.
-        max_speakers: Maximum expected number of speakers.
+        min_speakers: Minimum expected number of speakers (passed to scribe).
+        max_speakers: Maximum expected number of speakers (passed to scribe).
         skip_diarization: Skip speaker identification for faster processing.
-        model: MLX model override (e.g., 'mlx-community/whisper-large-v3-turbo' for speed).
+        model: Whisper model override (e.g., 'large-v3' for best accuracy).
     """
     path = Path(file_path)
     if not path.exists():
@@ -169,7 +167,7 @@ def get_transcription(
     Args:
         file_path: Path to the audio file (as used in transcribe_audio).
         include_timestamps: Whether to include timestamps in output.
-        speaker_filter: Only show segments from this speaker (e.g., 'SPEAKER_00').
+        speaker_filter: Only show segments from this speaker (e.g., 'Speaker 1').
     """
     path = Path(file_path).resolve()
     key = str(path)
