@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "monkey-tools",
-  "description": "AI-powered tools for Claude by The Agile Monkeys",
+  "name": "monkey-skills",
+  "description": "AI-powered skills for Claude by The Agile Monkeys",
   "owner": {
     "name": "The Agile Monkeys",
     "email": "labs@theagilemonkeys.com"

@@ -1,6 +1,6 @@
-# Monkey Tools
+# Monkey Skills
 
-AI-powered tools for [Claude](https://claude.ai) by [The Agile Monkeys](https://theagilemonkeys.com).
+AI-powered skills for [Claude](https://claude.ai) by [The Agile Monkeys](https://theagilemonkeys.com).
 
 A plugin marketplace for Claude Code and Claude Desktop. Install once, use everywhere Claude runs.
 
@@ -19,7 +19,7 @@ A plugin marketplace for Claude Code and Claude Desktop. Install once, use every
 3. Select **Browse Plugins**
 4. Go to the **Personal** tab and click the **+** button
 5. Select **Add marketplace**
-6. Enter `theam/monkey-tools` and click **Sync**
+6. Enter `theam/monkey-skills` and click **Sync**
 7. Install the plugins you want from the list
 
 ### Claude App — Code Tab
@@ -28,15 +28,15 @@ The Code tab in the Claude app uses a separate plugin configuration from the cha
 
 1. Open the **Code** tab
 2. Click **Customize** (bottom-left)
-3. Follow the same marketplace steps as above (Personal Plugins → Browse → Add marketplace → `theam/monkey-tools`)
+3. Follow the same marketplace steps as above (Personal Plugins → Browse → Add marketplace → `theam/monkey-skills`)
 
 > **Note**: Plugins installed in the chat interface are not shared with the Code tab — you need to install them separately.
 
 ### Claude Code (CLI)
 
 ```bash
-claude plugin marketplace add theam/monkey-tools
-claude plugin install transcription@monkey-tools
+claude plugin marketplace add theam/monkey-skills
+claude plugin install transcription@monkey-skills
 ```
 
 ---
