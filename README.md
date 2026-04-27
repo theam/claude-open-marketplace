@@ -1,4 +1,4 @@
-# Monkey Skills
+# The Agile Monkeys Claude Open Marketplace
 
 AI-powered skills for [Claude](https://claude.ai) by [The Agile Monkeys](https://theagilemonkeys.com).
 
@@ -36,7 +36,7 @@ The Code tab in the Claude app uses a separate plugin configuration from the cha
 
 ```bash
 claude plugin marketplace add theam/claude-open-marketplace
-claude plugin install transcription@monkey-skills
+claude plugin install transcription@claude-open-marketplace
 ```
 
 ---

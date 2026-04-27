@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "monkey-skills",
+  "name": "claude-open-marketplace",
   "description": "AI-powered skills for Claude by The Agile Monkeys",
   "owner": {
     "name": "The Agile Monkeys",
